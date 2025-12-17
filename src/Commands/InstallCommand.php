@@ -622,9 +622,14 @@ PHP;
 
     private function runMigrations(): void
     {
-        // Note: We don't run migrations automatically because the .env was just updated
-        // and the current PHP process still has the old config cached.
-        // The user should run migrations manually after the install completes.
-        info('Run <comment>php artisan migrate</comment> to set up the database');
+        // Run migrations in a fresh process since .env was just updated
+        // and the current PHP process still has the old config cached
+        spin(
+            callback: function () {
+                Process::run('php artisan migrate --force')->throw();
+            },
+            message: 'Running migrations...'
+        );
+        info('Migrations complete');
     }
 }
