@@ -192,6 +192,43 @@ class InstallCommand extends Command
             );
         }
 
+        // Coding standards documentation
+        $this->publishDirectory(
+            "{$stubsPath}/docs/standards",
+            base_path('docs/standards'),
+            'docs/standards',
+            $force
+        );
+
+        // Config files
+        $this->publishFile(
+            "{$stubsPath}/prettierrc.stub",
+            base_path('.prettierrc'),
+            '.prettierrc',
+            $force
+        );
+
+        $this->publishFile(
+            "{$stubsPath}/prettierignore.stub",
+            base_path('.prettierignore'),
+            '.prettierignore',
+            $force
+        );
+
+        $this->publishFile(
+            "{$stubsPath}/editorconfig.stub",
+            base_path('.editorconfig'),
+            '.editorconfig',
+            $force
+        );
+
+        $this->publishFile(
+            "{$stubsPath}/eslint.config.js.stub",
+            base_path('eslint.config.js'),
+            'eslint.config.js',
+            $force
+        );
+
         // Update AppServiceProvider for Telescope fix
         if ($this->installTelescope) {
             $this->updateAppServiceProvider();
@@ -211,6 +248,19 @@ class InstallCommand extends Command
 
         File::ensureDirectoryExists(dirname($destination));
         File::copy($source, $destination);
+        info("Published {$name}");
+    }
+
+    private function publishDirectory(string $source, string $destination, string $name, bool $force): void
+    {
+        if (File::isDirectory($destination) && ! $force) {
+            warning("Skipping {$name} (already exists). Use --force to overwrite.");
+
+            return;
+        }
+
+        File::ensureDirectoryExists($destination);
+        File::copyDirectory($source, $destination);
         info("Published {$name}");
     }
 
