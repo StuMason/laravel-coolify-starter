@@ -14,6 +14,7 @@ use function Laravel\Prompts\warning;
 class InstallCommand extends Command
 {
     protected $signature = 'coolify:install
+                            {name? : Project name for database/redis naming}
                             {--horizon : Install Laravel Horizon}
                             {--reverb : Install Laravel Reverb}
                             {--telescope : Install Laravel Telescope}
@@ -28,13 +29,17 @@ class InstallCommand extends Command
 
     private bool $installTelescope = false;
 
+    private string $projectName = '';
+
     public function handle(): int
     {
         info('🚀 Installing Coolify Starter Kit...');
 
+        $this->determineProjectName();
         $this->determinePackagesToInstall();
         $this->installPackages();
         $this->publishStubs();
+        $this->updateEnvFile();
         $this->updateComposerJson();
         $this->updateBootstrapProviders();
         $this->runMigrations();
@@ -52,6 +57,26 @@ class InstallCommand extends Command
         ]);
 
         return self::SUCCESS;
+    }
+
+    private function determineProjectName(): void
+    {
+        $name = $this->argument('name');
+
+        if ($name) {
+            $this->projectName = $this->sanitizeName($name);
+
+            return;
+        }
+
+        // Infer from directory name
+        $this->projectName = $this->sanitizeName(basename(base_path()));
+    }
+
+    private function sanitizeName(string $name): string
+    {
+        // Convert to lowercase, replace spaces/hyphens with underscores
+        return strtolower(preg_replace('/[^a-zA-Z0-9]/', '_', $name));
     }
 
     private function determinePackagesToInstall(): void
@@ -268,6 +293,73 @@ class InstallCommand extends Command
         File::ensureDirectoryExists($destination);
         File::copyDirectory($source, $destination);
         info("Published {$name}");
+    }
+
+    private function updateEnvFile(): void
+    {
+        $envPath = base_path('.env');
+
+        if (! File::exists($envPath)) {
+            warning('.env file not found, skipping environment setup.');
+
+            return;
+        }
+
+        $content = File::get($envPath);
+        $updates = [];
+
+        // App name
+        if (str_contains($content, 'APP_NAME=Laravel')) {
+            $appName = ucwords(str_replace('_', ' ', $this->projectName));
+            $content = preg_replace('/^APP_NAME=.*/m', "APP_NAME=\"{$appName}\"", $content);
+            $updates[] = 'APP_NAME';
+        }
+
+        // Database
+        if (str_contains($content, 'DB_CONNECTION=sqlite') || str_contains($content, 'DB_DATABASE=laravel')) {
+            $content = preg_replace('/^DB_CONNECTION=.*/m', 'DB_CONNECTION=pgsql', $content);
+            $content = preg_replace('/^DB_HOST=.*/m', 'DB_HOST=127.0.0.1', $content);
+            $content = preg_replace('/^DB_PORT=.*/m', 'DB_PORT=5432', $content);
+            $content = preg_replace('/^DB_DATABASE=.*/m', "DB_DATABASE={$this->projectName}", $content);
+            $content = preg_replace('/^DB_USERNAME=.*/m', 'DB_USERNAME=postgres', $content);
+            $content = preg_replace('/^DB_PASSWORD=.*/m', 'DB_PASSWORD=', $content);
+            $updates[] = 'DB_*';
+        }
+
+        // Redis/Cache/Queue/Session
+        $redisSettings = [
+            'SESSION_DRIVER' => 'redis',
+            'CACHE_STORE' => 'redis',
+            'QUEUE_CONNECTION' => 'redis',
+        ];
+
+        foreach ($redisSettings as $key => $value) {
+            if (preg_match("/^{$key}=(?!{$value})/m", $content)) {
+                $content = preg_replace("/^{$key}=.*/m", "{$key}={$value}", $content);
+                $updates[] = $key;
+            }
+        }
+
+        // Reverb settings
+        if ($this->installReverb && ! str_contains($content, 'REVERB_APP_ID')) {
+            $reverbId = random_int(100000, 999999);
+            $reverbKey = bin2hex(random_bytes(16));
+            $reverbSecret = bin2hex(random_bytes(16));
+
+            $content .= "\n# Reverb WebSocket Server\n";
+            $content .= "REVERB_APP_ID={$reverbId}\n";
+            $content .= "REVERB_APP_KEY={$reverbKey}\n";
+            $content .= "REVERB_APP_SECRET={$reverbSecret}\n";
+            $content .= "REVERB_HOST=localhost\n";
+            $content .= "REVERB_PORT=8080\n";
+            $content .= "REVERB_SCHEME=http\n";
+            $updates[] = 'REVERB_*';
+        }
+
+        if (! empty($updates)) {
+            File::put($envPath, $content);
+            info('Updated .env: '.implode(', ', $updates));
+        }
     }
 
     private function prependToClaudeMd(string $stubPath): void
