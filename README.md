@@ -2,6 +2,8 @@
 
 A Laravel package that configures a fresh Laravel app for production deployment on Coolify with Nixpacks.
 
+Opinionated. Built for Claude Code and VSCode. Includes comprehensive coding standards documentation that gets published to your project for AI-assisted development.
+
 ## What it does
 
 Runs a single artisan command that:
@@ -70,16 +72,18 @@ composer run dev
 ## What gets installed
 
 ### Always installed
+
 - `laravel/sanctum` - API authentication
 
 ### Optional (via prompts)
+
 - `laravel/horizon` - Redis queue dashboard
 - `laravel/reverb` - WebSocket server
 - `laravel/telescope` - Debug assistant
 
 ## Files published
 
-```
+```text
 nixpacks.toml                           # Coolify/Nixpacks build config
 app/Http/Controllers/HealthCheckController.php
 resources/js/pages/health-check.tsx
@@ -97,7 +101,7 @@ CLAUDE.md                                   # Prepended with standards refs
 
 The installer updates `.env`:
 
-```
+```bash
 DB_CONNECTION=pgsql
 DB_DATABASE=your_project_name
 SESSION_DRIVER=redis
