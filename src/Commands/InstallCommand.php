@@ -36,19 +36,19 @@ class InstallCommand extends Command
 
     public function handle(): int
     {
-        info('🚀 Installing Coolify Starter Kit...');
+        info('Installing Coolify Starter Kit...');
 
         $this->determineProjectName();
         $this->determinePackagesToInstall();
+        $this->updateEnvFile(); // Update env FIRST so package migrations use correct DB
         $this->installPackages();
         $this->publishStubs();
         $this->updateComposerJson();
         $this->updateBootstrapProviders();
-        $this->updateEnvFile(); // Update env LAST to avoid triggering Boost's post-update-cmd with wrong DB config
         $this->runMigrations();
 
         $this->newLine();
-        info('✅ Coolify Starter Kit installed successfully!');
+        info('Coolify Starter Kit installed successfully!');
         $this->newLine();
 
         $this->components->bulletList([
@@ -622,8 +622,7 @@ PHP;
 
     private function runMigrations(): void
     {
-        // Run migrations in a fresh process since .env was just updated
-        // and the current PHP process still has the old config cached
+        // Run migrations in a fresh process to pick up the updated .env
         spin(
             callback: function () {
                 Process::run('php artisan migrate --force')->throw();
