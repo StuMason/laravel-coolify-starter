@@ -14,7 +14,14 @@ Runs `php artisan coolify:install` which:
 - Adds a `composer run dev` script that runs everything concurrently
 - Publishes coding standards docs to `docs/standards/`
 
-If you have `COOLIFY_URL` and `COOLIFY_TOKEN` configured, it offers to run `coolify:provision` to create the app on Coolify.
+If you have `COOLIFY_URL` and `COOLIFY_TOKEN` in your `.env`, it offers to run `coolify:provision` to create the app on Coolify.
+
+```
+COOLIFY_URL=https://app.coolify.io
+COOLIFY_TOKEN=your-api-token
+```
+
+The token needs to be a **root-level API token** (created by a Coolify admin under Keys & Tokens > API Tokens).
 
 ## Requirements
 
