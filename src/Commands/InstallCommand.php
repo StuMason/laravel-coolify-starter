@@ -229,6 +229,14 @@ class InstallCommand extends Command
             $force
         );
 
+        // CLAUDE.md with coding standards references
+        $this->publishFile(
+            "{$stubsPath}/CLAUDE.md.stub",
+            base_path('CLAUDE.md'),
+            'CLAUDE.md',
+            $force
+        );
+
         // Update AppServiceProvider for Telescope fix
         if ($this->installTelescope) {
             $this->updateAppServiceProvider();

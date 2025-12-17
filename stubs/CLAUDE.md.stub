@@ -1,0 +1,56 @@
+# Claude Code Instructions
+
+## Running Tests
+
+Use this command to run tests (avoids environment variable conflicts):
+
+```bash
+env -u APP_ENV -u DB_CONNECTION -u DB_DATABASE -u DB_HOST -u DB_PORT -u DB_USERNAME -u DB_PASSWORD -u SESSION_DRIVER -u CACHE_STORE -u QUEUE_CONNECTION php artisan test
+```
+
+## Coding Standards
+
+**IMPORTANT:** Before writing any code, review the coding standards in `docs/standards/`:
+
+- **[README.md](docs/standards/README.md)** - Quick reference and checklist
+- **[general.md](docs/standards/general.md)** - Core principles, type hints, imports
+- **[backend.md](docs/standards/backend.md)** - Laravel patterns: models, migrations, controllers, Actions, DTOs
+- **[frontend.md](docs/standards/frontend.md)** - Inertia + React + Tailwind patterns
+- **[testing.md](docs/standards/testing.md)** - Pest v4 testing patterns
+
+These standards are based on real patterns in this codebase and take precedence over generic Laravel conventions.
+
+## Quick Reference
+
+### Key Principles
+
+1. **Thin controllers, fat Actions** - Controllers orchestrate, Actions contain business logic
+2. **Always import classes** - Never use inline FQCN
+3. **Never use env() outside config files** - Use `config()` helper
+4. **Type hints everywhere** - All parameters and return types
+5. **Money as integers** - Store pence/cents, not pounds/dollars
+6. **Lowercase import paths** - Critical for production builds (Linux is case-sensitive)
+7. **Use createQuietly in tests** - Avoid event side effects
+8. **Use lucide-react icons** - Never use emojis in UI
+
+### Common Commands
+
+```bash
+# Format PHP code
+vendor/bin/pint
+
+# Format frontend code
+npm run format && npm run lint
+
+# Run tests
+php artisan test
+
+# Run specific test
+php artisan test --filter=testName
+
+# Dev server (runs all services)
+composer run dev
+
+# Build frontend
+npm run build
+```
