@@ -20,7 +20,7 @@ Runs a single artisan command that:
 ## Requirements
 
 - PHP 8.2+
-- Laravel 11 or 12
+- Laravel 12
 - Fresh Laravel install (works best on new projects)
 
 ## Installation
