@@ -18,6 +18,7 @@ class InstallCommand extends Command
                             {--horizon : Install Laravel Horizon}
                             {--reverb : Install Laravel Reverb}
                             {--telescope : Install Laravel Telescope}
+                            {--coolify-dashboard : Install Laravel Coolify dashboard}
                             {--all : Install all optional packages}
                             {--force : Overwrite existing files}';
 
@@ -28,6 +29,8 @@ class InstallCommand extends Command
     private bool $installReverb = false;
 
     private bool $installTelescope = false;
+
+    private bool $installCoolifyDashboard = false;
 
     private string $projectName = '';
 
@@ -53,10 +56,53 @@ class InstallCommand extends Command
             'Visit <comment>/health</comment> to check system status',
             $this->installHorizon ? 'Visit <comment>/horizon</comment> to monitor queues' : null,
             $this->installTelescope ? 'Visit <comment>/telescope</comment> for debugging' : null,
+            $this->installCoolifyDashboard ? 'Visit <comment>/coolify</comment> to manage deployments' : null,
             'Deploy to Coolify using the <comment>nixpacks.toml</comment> configuration',
         ]);
 
+        // Offer to provision on Coolify if the dashboard was installed
+        if ($this->installCoolifyDashboard) {
+            $this->offerCoolifyProvisioning();
+        }
+
         return self::SUCCESS;
+    }
+
+    private function offerCoolifyProvisioning(): void
+    {
+        $this->newLine();
+
+        // Check if Coolify is configured
+        $token = config('coolify.token') ?: env('COOLIFY_TOKEN');
+        $url = config('coolify.url') ?: env('COOLIFY_URL');
+
+        if (empty($token) || empty($url)) {
+            info('💡 To provision your app on Coolify, add these to your .env:');
+            $this->components->bulletList([
+                '<comment>COOLIFY_URL</comment>=https://app.coolify.io (or your self-hosted URL)',
+                '<comment>COOLIFY_TOKEN</comment>=your-api-token',
+            ]);
+            info('Then run: <comment>php artisan coolify:provision</comment>');
+
+            return;
+        }
+
+        if (! $this->option('no-interaction')) {
+            $provision = confirm(
+                label: 'Would you like to provision this app on Coolify now?',
+                default: false,
+                hint: 'This will create the app, database, and Redis on your Coolify server'
+            );
+
+            if ($provision) {
+                $this->newLine();
+                $this->call('coolify:provision', [
+                    '--name' => $this->projectName,
+                    '--with-postgres' => true,
+                    '--with-dragonfly' => true,
+                ]);
+            }
+        }
     }
 
     private function determineProjectName(): void
@@ -85,14 +131,16 @@ class InstallCommand extends Command
             $this->installHorizon = true;
             $this->installReverb = true;
             $this->installTelescope = true;
+            $this->installCoolifyDashboard = true;
 
             return;
         }
 
-        if ($this->option('horizon') || $this->option('reverb') || $this->option('telescope')) {
+        if ($this->option('horizon') || $this->option('reverb') || $this->option('telescope') || $this->option('coolify-dashboard')) {
             $this->installHorizon = $this->option('horizon');
             $this->installReverb = $this->option('reverb');
             $this->installTelescope = $this->option('telescope');
+            $this->installCoolifyDashboard = $this->option('coolify-dashboard');
 
             return;
         }
@@ -112,6 +160,11 @@ class InstallCommand extends Command
             label: 'Install Laravel Telescope? (Debugging & monitoring)',
             default: true
         );
+
+        $this->installCoolifyDashboard = confirm(
+            label: 'Install Laravel Coolify dashboard? (Manage your Coolify deployments)',
+            default: true
+        );
     }
 
     private function installPackages(): void
@@ -128,6 +181,10 @@ class InstallCommand extends Command
 
         if ($this->installTelescope) {
             $packages[] = 'laravel/telescope';
+        }
+
+        if ($this->installCoolifyDashboard) {
+            $packages[] = 'stumason/laravel-coolify';
         }
 
         // Always install Sanctum for API auth
@@ -168,6 +225,13 @@ class InstallCommand extends Command
             spin(
                 callback: fn () => Process::run('php artisan telescope:install --no-interaction')->throw(),
                 message: 'Installing Telescope...'
+            );
+        }
+
+        if ($this->installCoolifyDashboard) {
+            spin(
+                callback: fn () => Process::run('php artisan coolify-dashboard:install --no-interaction')->throw(),
+                message: 'Installing Coolify Dashboard...'
             );
         }
     }
