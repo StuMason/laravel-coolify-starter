@@ -40,11 +40,11 @@ class InstallCommand extends Command
 
         $this->determineProjectName();
         $this->determinePackagesToInstall();
-        $this->updateEnvFile(); // Update env FIRST so package migrations use correct DB
         $this->installPackages();
         $this->publishStubs();
         $this->updateComposerJson();
         $this->updateBootstrapProviders();
+        $this->updateEnvFile(); // Update env LAST to avoid triggering issues with composer
         $this->runMigrations();
 
         $this->newLine();
@@ -208,27 +208,28 @@ class InstallCommand extends Command
         );
 
         // Run package-specific install commands
+        // Note: We publish assets but skip migrations - we run all migrations at the end
+        // after .env is updated to use the correct database
         if ($this->installHorizon) {
             spin(
-                callback: fn () => Process::run('php artisan horizon:install --no-interaction')->throw(),
-                message: 'Installing Horizon...'
+                callback: fn () => Process::run('php artisan vendor:publish --provider="Laravel\Horizon\HorizonServiceProvider" --no-interaction')->throw(),
+                message: 'Publishing Horizon assets...'
             );
         }
 
         if ($this->installReverb) {
             spin(
                 callback: function () {
-                    // reverb:install prompts for app ID even with --no-interaction, so we publish manually
                     Process::run('php artisan vendor:publish --provider="Laravel\Reverb\ReverbServiceProvider" --no-interaction')->throw();
                 },
-                message: 'Installing Reverb...'
+                message: 'Publishing Reverb assets...'
             );
         }
 
         if ($this->installTelescope) {
             spin(
-                callback: fn () => Process::run('php artisan telescope:install --no-interaction')->throw(),
-                message: 'Installing Telescope...'
+                callback: fn () => Process::run('php artisan vendor:publish --provider="Laravel\Telescope\TelescopeServiceProvider" --no-interaction')->throw(),
+                message: 'Publishing Telescope assets...'
             );
         }
 
