@@ -82,7 +82,7 @@ public function lease(): BelongsTo
         ->where('payable_type', Lease::class);
 }
 
-// Then in resources/queries, use the cleaner relation:
+// Then you can use the specific relation:
 $payment->lease  // Instead of checking $payment->payable
 ```
 
@@ -157,17 +157,17 @@ $table->index(['attachmentable_type', 'attachmentable_id']); // Already done!
 Controllers should be thin orchestration layers. Business logic belongs in Action classes.
 
 ```php
-use App\Actions\Cleaner\UpdateCleanerInfo;
-use App\Http\Requests\Cleaner\UpdateProfileInfoRequest;
+use App\Actions\User\UpdateUserProfile;
+use App\Http\Requests\User\UpdateProfileRequest;
 use Illuminate\Http\RedirectResponse;
 use InvalidArgumentException;
 
 class ProfileController extends Controller
 {
     /**
-     * Update the cleaner's profile information.
+     * Update the user's profile information.
      */
-    public function updateInfo(UpdateProfileInfoRequest $request, UpdateCleanerInfo $action): RedirectResponse
+    public function update(UpdateProfileRequest $request, UpdateUserProfile $action): RedirectResponse
     {
         try {
             $action->handle($request->user(), $request->validated());
@@ -203,7 +203,7 @@ This pattern makes adding API endpoints trivial - the same Action works for both
 // Web Controller (Inertia)
 class ProfileController extends Controller
 {
-    public function updateInfo(UpdateProfileInfoRequest $request, UpdateCleanerInfo $action): RedirectResponse
+    public function update(UpdateProfileRequest $request, UpdateUserProfile $action): RedirectResponse
     {
         $action->handle($request->user(), $request->validated());
         return back()->with('success', 'Updated');
@@ -213,10 +213,10 @@ class ProfileController extends Controller
 // API Controller (Mobile App)
 class Api\ProfileController extends Controller
 {
-    public function updateInfo(UpdateProfileInfoRequest $request, UpdateCleanerInfo $action): JsonResponse
+    public function update(UpdateProfileRequest $request, UpdateUserProfile $action): JsonResponse
     {
-        $profile = $action->handle($request->user(), $request->validated());
-        return response()->json(CleanerProfileResource::make($profile));
+        $user = $action->handle($request->user(), $request->validated());
+        return response()->json(UserResource::make($user));
     }
 }
 ```
@@ -339,59 +339,46 @@ Actions live in `app/Actions/{Domain}/` organized by domain:
 
 ```text
 app/Actions/
-├── Cleaner/
-│   ├── UpdateCleanerInfo.php
-│   ├── UpdateCleanerRates.php
+├── User/
+│   ├── UpdateUserProfile.php
+│   ├── UpdateUserSettings.php
 │   └── ToggleProfileVisibility.php
-├── Job/
-│   ├── CreateDraftJob.php
-│   ├── PublishJobPosting.php
-│   └── UpdateDraftJobStep.php
-└── Quote/
-    ├── SubmitJobQuote.php
-    ├── AcceptJobQuote.php
-    └── WithdrawJobQuote.php
+├── Order/
+│   ├── CreateDraftOrder.php
+│   ├── PublishOrder.php
+│   └── UpdateDraftOrderStep.php
+└── Invoice/
+    ├── CreateInvoice.php
+    ├── MarkInvoicePaid.php
+    └── VoidInvoice.php
 ```
 
 ### Standard Action Pattern
 
 ```php
-namespace App\Actions\Cleaner;
+namespace App\Actions\User;
 
-use App\Models\CleanerProfile;
 use App\Models\User;
 use InvalidArgumentException;
 
-class UpdateCleanerInfo
+class UpdateUserProfile
 {
     /**
-     * Update the cleaner's personal info across User and CleanerProfile models.
+     * Update the user's profile information.
      *
      * @param  array<string, mixed>  $data
      * @throws InvalidArgumentException
      */
-    public function handle(User $user, array $data): CleanerProfile
+    public function handle(User $user, array $data): User
     {
-        $profile = $user->cleanerProfile;
-
-        if (! $profile) {
-            throw new InvalidArgumentException('Profile not found');
-        }
-
-        // Update user table fields
+        // Update user fields
         $user->update([
-            'first_name' => $data['first_name'],
-            'last_name' => $data['last_name'],
+            'name' => $data['name'],
             'email' => $data['email'],
+            'bio' => $data['bio'] ?? null,
         ]);
 
-        // Update profile fields
-        $profile->update([
-            'bio' => $data['bio'],
-            'experience_band' => $data['experience_band'],
-        ]);
-
-        return $profile;
+        return $user;
     }
 }
 ```
@@ -399,44 +386,32 @@ class UpdateCleanerInfo
 ### Action with Events
 
 ```php
-namespace App\Actions\Quote;
+namespace App\Actions\Order;
 
-use App\Events\QuoteAccepted;
-use App\Events\QuoteDeclined;
-use App\Models\JobPosting;
-use App\Models\Quote;
+use App\Events\OrderApproved;
+use App\Events\OrderRejected;
+use App\Models\Order;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 
-class AcceptJobQuote
+class ApproveOrder
 {
-    public function handle(JobPosting $job, Quote $quote): Quote
+    public function handle(Order $order): Order
     {
-        if ($quote->job_posting_id !== $job->id) {
-            throw new InvalidArgumentException('Quote does not belong to this job');
+        if ($order->status !== OrderStatus::Pending) {
+            throw new InvalidArgumentException('Order is not pending approval');
         }
 
-        return DB::transaction(function () use ($job, $quote) {
-            // Accept this quote
-            $quote->update([
-                'status' => QuoteStatus::Accepted,
-                'responded_at' => now(),
+        return DB::transaction(function () use ($order) {
+            // Approve this order
+            $order->update([
+                'status' => OrderStatus::Approved,
+                'approved_at' => now(),
             ]);
 
-            // Decline other quotes
-            $otherQuotes = $job->quotes()
-                ->where('id', '!=', $quote->id)
-                ->where('status', QuoteStatus::Submitted)
-                ->get();
+            OrderApproved::dispatch($order);
 
-            foreach ($otherQuotes as $other) {
-                $other->update(['status' => QuoteStatus::Declined, 'responded_at' => now()]);
-                QuoteDeclined::dispatch($other);
-            }
-
-            QuoteAccepted::dispatch($quote);
-
-            return $quote;
+            return $order;
         });
     }
 }
@@ -447,37 +422,32 @@ class AcceptJobQuote
 For multi-step wizards, use a single Action with step-specific logic:
 
 ```php
-namespace App\Actions\Job;
+namespace App\Actions\Order;
 
-use App\Models\JobPosting;
+use App\Models\Order;
 
-class UpdateDraftJobStep
+class UpdateDraftOrderStep
 {
-    public function handle(JobPosting $job, int $step, array $data): JobPosting
+    public function handle(Order $order, int $step, array $data): Order
     {
         $updateData = match ($step) {
             2 => $this->prepareStepTwoData($data),
             3 => $this->prepareStepThreeData($data),
             4 => $this->prepareStepFourData($data),
-            5 => $this->prepareStepFiveData($data),
             default => $data,
         };
 
         $updateData['wizard_step'] = $step;
-        $job->update($updateData);
+        $order->update($updateData);
 
-        return $job;
+        return $order;
     }
 
     private function prepareStepTwoData(array $data): array
     {
         return [
-            'property_category' => $data['property_category'],
-            'property_size' => $data['property_size'],
-            'special_notes' => [
-                'pets' => $data['has_pets'] ?? false,
-                'parking' => $data['parking'] ?? null,
-            ],
+            'shipping_address' => $data['shipping_address'],
+            'billing_address' => $data['billing_address'],
         ];
     }
     // ... other step methods
@@ -506,30 +476,19 @@ public function store(StoreRequest $request, CreateResource $action): RedirectRe
 Actions should have comprehensive unit tests:
 
 ```php
-test('it updates cleaner info', function () {
-    $user = User::factory()->cleaner()->create();
+test('it updates user profile', function () {
+    $user = User::factory()->create();
 
-    $action = new UpdateCleanerInfo;
+    $action = new UpdateUserProfile;
     $result = $action->handle($user, [
-        'first_name' => 'John',
-        'last_name' => 'Doe',
+        'name' => 'John Doe',
         'email' => 'john@example.com',
-        'bio' => 'Experienced cleaner',
-        'experience_band' => ExperienceBand::ThreeToFive->value,
+        'bio' => 'Software developer',
     ]);
 
-    expect($result->bio)->toBe('Experienced cleaner');
+    expect($result->bio)->toBe('Software developer');
     $user->refresh();
-    expect($user->first_name)->toBe('John');
-});
-
-test('it throws exception when profile not found', function () {
-    $user = User::factory()->create(); // No cleaner profile
-
-    $action = new UpdateCleanerInfo;
-
-    expect(fn () => $action->handle($user, [...]))
-        ->toThrow(InvalidArgumentException::class, 'Profile not found');
+    expect($user->name)->toBe('John Doe');
 });
 ```
 
@@ -618,36 +577,33 @@ protected function casts(): array
 - ✅ You need a single, reusable data structure across multiple controllers/pages
 - ✅ TypeScript integration is critical (DTOs map perfectly to TS interfaces)
 
-**Example: CleanerProfileData DTO**
+**Example: UserProfileData DTO**
 ```php
-// app/DataTransferObjects/CleanerProfileData.php
-final readonly class CleanerProfileData
+// app/DataTransferObjects/UserProfileData.php
+final readonly class UserProfileData
 {
     public function __construct(
         public int $id,
-        public string $firstName,
+        public string $name,
         public string $email,
-        public array $services,
+        public array $roles,
         // ... explicit contract
     ) {}
 
-    public static function fromModel(CleanerProfile $profile): self
+    public static function fromModel(User $user): self
     {
         return new self(
-            id: $profile->id,
-            firstName: $profile->user->first_name,
-            email: $profile->user->email,
-            services: $profile->services->map(fn($s) => [
-                'name' => $s->name,
-                'rate' => $s->effective_rate ?? $profile->base_hourly_rate,
-            ])->all(),
+            id: $user->id,
+            name: $user->name,
+            email: $user->email,
+            roles: $user->roles->pluck('name')->all(),
         );
     }
 }
 
 // In Controller
-return Inertia::render('Cleaner/Dashboard', [
-    'cleanerData' => CleanerProfileData::fromModel($profile),
+return Inertia::render('Profile/Show', [
+    'userData' => UserProfileData::fromModel($user),
 ]);
 ```
 
@@ -659,20 +615,20 @@ return Inertia::render('Cleaner/Dashboard', [
 
 ```php
 // ✅ Good - Model has accessor, DTO references it
-// Model: PortfolioItem.php
+// Model: Document.php
 public function getFileUrlAttribute(): string
 {
-    return Storage::disk('r2-public')->url($this->file_path);
+    return Storage::disk('s3')->url($this->file_path);
 }
 
 // DTO references the accessor
-portfolioItems: $profile->portfolioItems->map(fn($item) => [
-    'file_path' => $item->file_url,  // Uses accessor
+documents: $user->documents->map(fn($doc) => [
+    'url' => $doc->file_url,  // Uses accessor
 ])->all(),
 
 // ❌ Bad - DTO duplicates transformation logic
-portfolioItems: $profile->portfolioItems->map(fn($item) => [
-    'file_path' => Storage::disk('r2-public')->url($item->file_path),
+documents: $user->documents->map(fn($doc) => [
+    'url' => Storage::disk('s3')->url($doc->file_path),
 ])->all(),
 ```
 
@@ -686,21 +642,21 @@ portfolioItems: $profile->portfolioItems->map(fn($item) => [
 
 **Example: API Resource**
 ```php
-// app/Http/Resources/CleanerProfileResource.php
-class CleanerProfileResource extends JsonResource
+// app/Http/Resources/UserResource.php
+class UserResource extends JsonResource
 {
     public function toArray($request): array
     {
         return [
             'id' => $this->id,
-            'first_name' => $this->user->first_name,
-            'services' => ServiceResource::collection($this->whenLoaded('services')),
+            'name' => $this->name,
+            'roles' => RoleResource::collection($this->whenLoaded('roles')),
         ];
     }
 }
 
 // In API Controller
-return CleanerProfileResource::make($profile);
+return UserResource::make($user);
 ```
 
 **Summary:**

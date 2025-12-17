@@ -42,24 +42,6 @@ php artisan migrate:fresh --seed
 php artisan db:seed --class=ServiceSeeder
 ```
 
-### Seeders
-
-| Seeder | Purpose | Safe for Prod? |
-|--------|---------|----------------|
-| `ServiceSeeder` | Seeds all 15 services from `ServiceType` enum | Yes |
-| `DevelopmentSeeder` | Full dev environment setup | No |
-| `DatabaseSeeder` | Calls `DevelopmentSeeder` | No |
-
-**Test Users (from DevelopmentSeeder):**
-
-| User | Email | Password |
-|------|-------|----------|
-| Admin | `admin@localhost` | `password` |
-| Test Cleaner | `cleaner@test.test` | `test` |
-| Test Client | `client@test.test` | `test` |
-
-Demo cleaners use `*@demo.tidylinker.co.uk` emails.
-
 ### Key Principles
 
 1. **Thin controllers, fat Actions** - Controllers orchestrate, Actions contain business logic

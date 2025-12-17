@@ -79,22 +79,22 @@ it('creates a category', function () {
 ```text
 tests/Feature/
 ├── Actions/                              # Action unit tests
-│   ├── Cleaner/
-│   │   ├── UpdateCleanerInfoTest.php
+│   ├── User/
+│   │   ├── UpdateUserProfileTest.php
 │   │   └── ToggleProfileVisibilityTest.php
-│   ├── Job/
-│   │   ├── CreateDraftJobTest.php
-│   │   └── PublishJobPostingTest.php
-│   └── Quote/
-│       ├── AcceptJobQuoteTest.php
-│       └── SubmitJobQuoteTest.php
+│   ├── Order/
+│   │   ├── CreateDraftOrderTest.php
+│   │   └── PublishOrderTest.php
+│   └── Invoice/
+│       ├── CreateInvoiceTest.php
+│       └── MarkInvoicePaidTest.php
 ├── DataTransferObjects/                  # DTO tests
-│   ├── CleanerJobDataTest.php
-│   └── ClientQuoteDataTest.php
+│   ├── UserProfileDataTest.php
+│   └── OrderDataTest.php
 ├── Models/                               # Model scope/behavior tests
-│   └── JobPostingScopesTest.php
-├── Client/                               # Controller integration tests
-│   └── PostJobWizardTest.php
+│   └── OrderScopesTest.php
+├── Admin/                                # Controller integration tests
+│   └── OrderWizardTest.php
 └── Auth/
     ├── LoginTest.php
     └── RegistrationTest.php
@@ -213,41 +213,25 @@ Actions are the core of business logic and should have comprehensive tests.
 ```php
 <?php
 
-use App\Actions\Cleaner\UpdateCleanerInfo;
-use App\Enums\ExperienceBand;
+use App\Actions\User\UpdateUserProfile;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
 uses(RefreshDatabase::class);
 
-test('it updates user personal info', function () {
-    $user = User::factory()->cleaner()->create();
+test('it updates user profile', function () {
+    $user = User::factory()->create();
 
-    $action = new UpdateCleanerInfo;
+    $action = new UpdateUserProfile;
     $action->handle($user, [
-        'first_name' => 'John',
-        'last_name' => 'Doe',
+        'name' => 'John Doe',
         'email' => 'john@example.com',
-        'phone' => '07123456789',
-        'dob' => '1990-05-15',
-        'bio' => 'Experienced cleaner',
-        'experience_band' => ExperienceBand::TenPlus->value,
+        'bio' => 'Software developer',
     ]);
 
     $user->refresh();
-    expect($user->first_name)->toBe('John');
-    expect($user->last_name)->toBe('Doe');
-});
-
-test('it throws exception when profile not found', function () {
-    $user = User::factory()->create(); // No cleaner profile
-
-    $action = new UpdateCleanerInfo;
-
-    expect(fn () => $action->handle($user, [
-        'first_name' => 'John',
-        // ...
-    ]))->toThrow(InvalidArgumentException::class, 'Profile not found');
+    expect($user->name)->toBe('John Doe');
+    expect($user->email)->toBe('john@example.com');
 });
 ```
 
@@ -262,22 +246,21 @@ test('it throws exception when profile not found', function () {
 ### Testing Events in Actions
 
 ```php
-use App\Events\QuoteAccepted;
+use App\Events\OrderApproved;
 use Illuminate\Support\Facades\Event;
 
 beforeEach(function () {
-    Event::fake([QuoteAccepted::class]);
+    Event::fake([OrderApproved::class]);
 });
 
-test('it dispatches QuoteAccepted event', function () {
-    $job = JobPosting::factory()->open()->create();
-    $quote = Quote::factory()->create(['job_posting_id' => $job->id]);
+test('it dispatches OrderApproved event', function () {
+    $order = Order::factory()->pending()->create();
 
-    $action = new AcceptJobQuote;
-    $action->handle($job, $quote);
+    $action = new ApproveOrder;
+    $action->handle($order);
 
-    Event::assertDispatched(QuoteAccepted::class, function ($event) use ($quote) {
-        return $event->quote->id === $quote->id;
+    Event::assertDispatched(OrderApproved::class, function ($event) use ($order) {
+        return $event->order->id === $order->id;
     });
 });
 ```
@@ -286,16 +269,16 @@ test('it dispatches QuoteAccepted event', function () {
 
 ```php
 test('it uses database transaction', function () {
-    $job = JobPosting::factory()->open()->create();
+    $order = Order::factory()->pending()->create();
 
     // Force an error mid-transaction
-    Quote::creating(fn () => throw new \Exception('Forced error'));
+    OrderItem::creating(fn () => throw new \Exception('Forced error'));
 
-    expect(fn () => $action->handle($job, $data))
+    expect(fn () => $action->handle($order, $data))
         ->toThrow(\Exception::class);
 
     // Verify nothing was persisted
-    expect(Quote::count())->toBe(0);
+    expect(OrderItem::count())->toBe(0);
 });
 ```
 
@@ -340,7 +323,7 @@ it('loads authenticated pages without JavaScript errors', function () {
 
     $pages = visit([
         '/dashboard',
-        '/cleaners',
+        '/settings',
     ]);
 
     $pages->assertNoJavascriptErrors();

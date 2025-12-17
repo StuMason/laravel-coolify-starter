@@ -213,8 +213,8 @@ resources/js/
 
 - ✅ Use kebab-case for component files: `app-header.tsx`, `edit-profile-dialog.tsx`
 - ✅ Use PascalCase for the component function: `export default function AppHeader()`
-- ✅ Use kebab-case for Inertia page paths: `'settings/profile'`, `'Cleaner/Dashboard'`
-- ✅ Page components in `pages/` can use PascalCase folders for namespacing: `pages/Cleaner/Dashboard.tsx`
+- ✅ Use kebab-case for Inertia page paths: `'settings/profile'`, `'Admin/Dashboard'`
+- ✅ Page components in `pages/` can use PascalCase folders for namespacing: `pages/Admin/Dashboard.tsx`
 
 ---
 
@@ -365,15 +365,14 @@ export function MyComponent() {
     const { auth } = usePage<SharedData>().props;
 
     // Available role checks
-    const isCleaner = auth.user?.is_cleaner;
-    const isClient = auth.user?.is_client;
     const isAdmin = auth.user?.is_admin;
-    const roles = auth.user?.roles; // ['cleaner', 'client', etc.]
+    const isModerator = auth.user?.is_moderator;
+    const roles = auth.user?.roles; // ['admin', 'moderator', etc.]
 
     return (
         <div>
-            {isCleaner && <CleanerDashboard />}
-            {isClient && <ClientDashboard />}
+            {isAdmin && <AdminDashboard />}
+            {isModerator && <ModeratorDashboard />}
         </div>
     );
 }
@@ -384,13 +383,13 @@ export function MyComponent() {
 Use role-specific route helpers for navigation:
 
 ```tsx
-import cleaner from '@/routes/cleaner';
-import client from '@/routes/client';
+import admin from '@/routes/admin';
+import user from '@/routes/user';
 
 // Determine dashboard URL based on role
-const dashboardUrl = isCleaner
-    ? cleaner.dashboard().url
-    : client.dashboard().url;
+const dashboardUrl = isAdmin
+    ? admin.dashboard().url
+    : user.dashboard().url;
 
 <Link href={dashboardUrl}>Dashboard</Link>
 ```
@@ -408,7 +407,7 @@ Money is stored as integers (pence/cents) in the database. Always divide by 100 
 <p>£{(stats.totalSpent / 100).toFixed(2)}</p>
 
 // For rates (stored as pence per hour)
-<p>£{(cleanerProfile.base_hourly_rate / 100).toFixed(2)}/hr</p>
+<p>£{(profile.hourly_rate / 100).toFixed(2)}/hr</p>
 ```
 
 ### Money Input Fields
