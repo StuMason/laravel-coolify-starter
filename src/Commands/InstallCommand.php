@@ -131,7 +131,10 @@ class InstallCommand extends Command
 
         if ($this->installReverb) {
             spin(
-                callback: fn () => Process::run('php artisan reverb:install --no-interaction')->throw(),
+                callback: function () {
+                    // reverb:install prompts for app ID even with --no-interaction, so we publish manually
+                    Process::run('php artisan vendor:publish --provider="Laravel\Reverb\ReverbServiceProvider" --no-interaction')->throw();
+                },
                 message: 'Installing Reverb...'
             );
         }
