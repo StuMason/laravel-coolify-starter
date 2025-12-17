@@ -77,7 +77,7 @@ class InstallCommand extends Command
         $url = config('coolify.url') ?: env('COOLIFY_URL');
 
         if (empty($token) || empty($url)) {
-            info('💡 To provision your app on Coolify, add these to your .env:');
+            info('To provision your app on Coolify, add these to your .env:');
             $this->components->bulletList([
                 '<comment>COOLIFY_URL</comment>=https://app.coolify.io (or your self-hosted URL)',
                 '<comment>COOLIFY_TOKEN</comment>=your-api-token',
@@ -96,11 +96,15 @@ class InstallCommand extends Command
 
             if ($provision) {
                 $this->newLine();
-                $this->call('coolify:provision', [
-                    '--name' => $this->projectName,
-                    '--with-postgres' => true,
-                    '--with-dragonfly' => true,
-                ]);
+                // Must use Process::run() because coolify:provision was just installed
+                // and isn't registered in the current PHP process
+                $result = Process::forever()->tty()->run(
+                    "php artisan coolify:provision --name={$this->projectName} --with-postgres --with-dragonfly"
+                );
+
+                if (! $result->successful()) {
+                    warning('Provisioning failed. Run manually: php artisan coolify:provision');
+                }
             }
         }
     }
