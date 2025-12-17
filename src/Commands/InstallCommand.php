@@ -229,13 +229,8 @@ class InstallCommand extends Command
             $force
         );
 
-        // CLAUDE.md with coding standards references
-        $this->publishFile(
-            "{$stubsPath}/CLAUDE.md.stub",
-            base_path('CLAUDE.md'),
-            'CLAUDE.md',
-            $force
-        );
+        // Prepend to CLAUDE.md with coding standards references
+        $this->prependToClaudeMd("{$stubsPath}/CLAUDE.md.stub");
 
         // Update AppServiceProvider for Telescope fix
         if ($this->installTelescope) {
@@ -270,6 +265,31 @@ class InstallCommand extends Command
         File::ensureDirectoryExists($destination);
         File::copyDirectory($source, $destination);
         info("Published {$name}");
+    }
+
+    private function prependToClaudeMd(string $stubPath): void
+    {
+        $claudeMdPath = base_path('CLAUDE.md');
+        $stubContent = File::get($stubPath);
+
+        // Check if already prepended
+        if (File::exists($claudeMdPath)) {
+            $existingContent = File::get($claudeMdPath);
+
+            if (str_contains($existingContent, 'docs/standards/')) {
+                warning('Skipping CLAUDE.md (already contains coding standards reference).');
+
+                return;
+            }
+
+            // Prepend stub content to existing file
+            File::put($claudeMdPath, $stubContent."\n\n---\n\n".$existingContent);
+            info('Updated CLAUDE.md with coding standards references');
+        } else {
+            // Create new file
+            File::put($claudeMdPath, $stubContent);
+            info('Published CLAUDE.md');
+        }
     }
 
     private function updateAppServiceProvider(): void
