@@ -39,9 +39,9 @@ class InstallCommand extends Command
         $this->determinePackagesToInstall();
         $this->installPackages();
         $this->publishStubs();
-        $this->updateEnvFile();
         $this->updateComposerJson();
         $this->updateBootstrapProviders();
+        $this->updateEnvFile(); // Update env LAST to avoid triggering Boost's post-update-cmd with wrong DB config
         $this->runMigrations();
 
         $this->newLine();
@@ -315,14 +315,27 @@ class InstallCommand extends Command
             $updates[] = 'APP_NAME';
         }
 
-        // Database
-        if (str_contains($content, 'DB_CONNECTION=sqlite') || str_contains($content, 'DB_DATABASE=laravel')) {
-            $content = preg_replace('/^DB_CONNECTION=.*/m', 'DB_CONNECTION=pgsql', $content);
-            $content = preg_replace('/^DB_HOST=.*/m', 'DB_HOST=127.0.0.1', $content);
-            $content = preg_replace('/^DB_PORT=.*/m', 'DB_PORT=5432', $content);
-            $content = preg_replace('/^DB_DATABASE=.*/m', "DB_DATABASE={$this->projectName}", $content);
-            $content = preg_replace('/^DB_USERNAME=.*/m', 'DB_USERNAME=postgres', $content);
-            $content = preg_replace('/^DB_PASSWORD=.*/m', 'DB_PASSWORD=', $content);
+        // Database - handle both commented and uncommented lines
+        // Check for sqlite connection OR commented DB lines (fresh Laravel install)
+        if (str_contains($content, 'DB_CONNECTION=sqlite') || preg_match('/^#\s*DB_HOST=/m', $content)) {
+            // Replace or uncomment and set DB settings
+            $dbSettings = [
+                'DB_CONNECTION' => 'pgsql',
+                'DB_HOST' => '127.0.0.1',
+                'DB_PORT' => '5432',
+                'DB_DATABASE' => $this->projectName,
+                'DB_USERNAME' => 'postgres',
+                'DB_PASSWORD' => '',
+            ];
+
+            foreach ($dbSettings as $key => $value) {
+                // Match both commented (# DB_KEY=...) and uncommented (DB_KEY=...) lines
+                $content = preg_replace(
+                    '/^#?\s*'.preg_quote($key, '/').'=.*/m',
+                    "{$key}={$value}",
+                    $content
+                );
+            }
             $updates[] = 'DB_*';
         }
 
@@ -359,6 +372,9 @@ class InstallCommand extends Command
         if (! empty($updates)) {
             File::put($envPath, $content);
             info('Updated .env: '.implode(', ', $updates));
+
+            // Clear config cache so the new values take effect immediately
+            Process::run('php artisan config:clear --no-interaction');
         }
     }
 
@@ -538,11 +554,9 @@ PHP;
 
     private function runMigrations(): void
     {
-        if (confirm('Run database migrations?', true)) {
-            spin(
-                callback: fn () => Process::run('php artisan migrate --no-interaction')->throw(),
-                message: 'Running migrations...'
-            );
-        }
+        // Note: We don't run migrations automatically because the .env was just updated
+        // and the current PHP process still has the old config cached.
+        // The user should run migrations manually after the install completes.
+        info('Run <comment>php artisan migrate</comment> to set up the database');
     }
 }
