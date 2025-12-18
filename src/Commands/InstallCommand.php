@@ -194,10 +194,6 @@ class InstallCommand extends Command
         // Always install Sanctum for API auth
         $packages[] = 'laravel/sanctum';
 
-        if (empty($packages)) {
-            return;
-        }
-
         $packageList = implode(' ', $packages);
 
         spin(
